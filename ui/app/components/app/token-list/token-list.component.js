@@ -32,44 +32,43 @@ const TokenList = () => {
   const tokenTrackerRef = useRef({})
   const tokenTracker = tokenTrackerRef.current
 
-  useEffect(() => {
-    if (tokenTracker.prev) {
-      if (
-        isEqual(tokens, tokenTracker.prev.tokens) &&
-        userAddress === tokenTracker.prev.userAddress &&
-        network === tokenTracker.prev.network
-      ) {
-        return
-      }
+
+  const cleanup = () => {
+    const { showError, tracker, updateBalances } = tokenTracker
+    if (tracker) {
+      console.log('CLEANUP')
+      tracker.stop()
+      tracker.removeListener('update', updateBalances)
+      tracker.removeListener('error', showError)
     }
-    tokenTracker.prev = { tokens, network, userAddress }
+  }
 
-    const cleanup = () => {
-      const { showError, tracker, updateBalances } = tokenTracker
-      if (tracker) {
-        tracker.stop()
-        tracker.removeListener('update', updateBalances)
-        tracker.removeListener('error', showError)
-      }
-    }
-
-    cleanup()
-    setTokensLoading(true)
-
-    if (!tokens || !tokens.length || !userAddress || network === 'loading' || !global.ethereumProvider) {
+  const constructTokenTracker = () => {
+    if (!tokens || !tokens.length) {
+      setTokensWithBalances([])
+      setTokensLoading(false)
       return
     }
+    setTokensLoading(true)
 
-    // Set up listener instances for cleaning up
+    if (!userAddress || network === 'loading' || !global.ethereumProvider) {
+      console.log('LOADING')
+      return
+    } else {
+      console.log('BUILDING')
+    }
+
     tokenTracker.updateBalances = (tokensWithBalances) => {
       setTokensWithBalances(tokensWithBalances)
       if (error) {
         setError(null)
       }
+      console.log('UPDATED')
       setTokensLoading(false)
     }
     tokenTracker.showError = (error) => {
       setError(error)
+      console.log('ERROR')
       setTokensLoading(false)
     }
 
@@ -82,8 +81,31 @@ const TokenList = () => {
     tokenTracker.tracker.on('update', tokenTracker.updateBalances)
     tokenTracker.tracker.on('error', tokenTracker.showError)
     tokenTracker.tracker.updateBalances()
+  }
 
+  // initial tracker setup and final teardown
+  useEffect(() => {
+    constructTokenTracker()
     return cleanup
+  }, []) // only execute this effect on mount
+
+  // rebuild tracker as needed
+  useEffect(() => {
+    if (!tokenTracker.prev) {
+      tokenTracker.prev = { tokens, network, userAddress }
+      return
+    }
+    if (
+      isEqual(tokens, tokenTracker.prev.tokens) &&
+      userAddress === tokenTracker.prev.userAddress &&
+      network === tokenTracker.prev.network
+    ) {
+      return
+    }
+    tokenTracker.prev = { tokens, network, userAddress }
+
+    cleanup()
+    constructTokenTracker()
   }, [network, tokens, userAddress])
 
   if (network === 'loading' || tokensLoading) {
